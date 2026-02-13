@@ -22,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api")
+// CORS is handled by Gateway, @CrossOrigin not needed here
 @RequiredArgsConstructor
 public class AuthController {
 	private static final Logger LOGGER = LoggerFactory.getLogger(AuthController.class);

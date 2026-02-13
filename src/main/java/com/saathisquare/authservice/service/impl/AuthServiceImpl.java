@@ -55,8 +55,11 @@ public class AuthServiceImpl implements AuthService {
 
 		if (user == null || user.getPassword() == null
 				|| !passwordEncoder.matches(request.password(), user.getPassword())) {
+
+			LOGGER.info("password is incorrect");
 			throw new BadCredentialsException("Invalid credentials");
 		}
+		LOGGER.info("password is incorrect");
 
 		// Create Spring Security UserDetails
 		UserDetails userDetails = User.withUsername(user.getUsername()).password(user.getPassword())
@@ -86,11 +89,44 @@ public class AuthServiceImpl implements AuthService {
 
 	@Override
 	public Response<UserDetailsResponse> updateUserDetails(UserDetailsRequest request) {
-		var user = rbacClient.getLoginDetailsByUsername(request.email()).getBody().getData();
+		LOGGER.info("Inside updateUserDetails: email={}, hasOldPassword={}, hasNewPassword={}", 
+				request.email(), 
+				request.oldPassword() != null && !request.oldPassword().isEmpty(),
+				request.newPassword() != null && !request.newPassword().isEmpty());
 		
-		if (!passwordEncoder.matches(request.oldPassword(), user.getPassword())) {
-			throw new BadCredentialsException("Old password doesn't match");
+		// Fetch user to get ID and validate password if changing password
+		var userResponse = rbacClient.getLoginDetailsByUsername(request.email()).getBody().getData();
+
+		// Only validate old password if trying to change password (newPassword is provided)
+		if (request.newPassword() != null && !request.newPassword().isEmpty()) {
+			if (request.oldPassword() == null || request.oldPassword().isEmpty()) {
+				throw new BadCredentialsException("Old password is required when changing password");
+			}
+			if (!passwordEncoder.matches(request.oldPassword(), userResponse.getPassword())) {
+				throw new BadCredentialsException("Old password doesn't match");
+			}
 		}
-		return rbacClient.updateUser(request).getBody(); // Ideally, an update endpoint
+		
+		// Validate that we have the user ID
+		if (userResponse.getId() == null) {
+			LOGGER.error("User ID is null for email: {}", request.email());
+			throw new IllegalStateException("Unable to retrieve user ID for email: " + request.email());
+		}
+		
+		// Create update request with user ID from fetched user
+		// This ensures the RBAC service can find the user by ID (more reliable than email lookup)
+		var updateRequest = new UserDetailsRequest(
+				userResponse.getId(), // UUID from fetched user - required for update
+				request.username() != null && !request.username().isEmpty() ? request.username() : userResponse.getUsername(),
+				request.email() != null && !request.email().isEmpty() ? request.email() : userResponse.getEmail(),
+				request.firstName(),
+				request.lastName(),
+				request.newPassword(),
+				request.oldPassword(),
+				request.roleName()
+		);
+		
+		LOGGER.info("Sending update request with ID: {}, email: {}", updateRequest.id(), updateRequest.email());
+		return rbacClient.updateUser(updateRequest).getBody();
 	}
 }

@@ -10,6 +10,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.saathisquare.authservice.service.CustomUserDetailsService;
 import com.saathisquare.authservice.service.JwtService;
 
@@ -22,15 +23,18 @@ public class SecurityConfig {
 
 	private final JwtService jwtService;
 	private final CustomUserDetailsService customUserDetailsService;
+	private final ObjectMapper objectMapper;
 
 	@Bean
 	public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
 		return http.csrf(csrf -> csrf.disable())
+				// CORS is handled by Gateway, not needed here
+				.cors(cors -> cors.disable())
 				.authorizeHttpRequests(auth -> auth
 						.requestMatchers("/api/login", "/api/signup")
 						.permitAll().anyRequest().authenticated())
 				.sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-				.addFilterBefore(jwtAuthenticationFilter(jwtService, customUserDetailsService),
+				.addFilterBefore(jwtAuthenticationFilter(jwtService, customUserDetailsService, objectMapper),
 						UsernamePasswordAuthenticationFilter.class)
 				.build();
 	}
@@ -42,8 +46,9 @@ public class SecurityConfig {
 
 	@Bean
 	public JwtAuthenticationFilter jwtAuthenticationFilter(JwtService jwtService,
-			CustomUserDetailsService userDetailsService) {
-		return new JwtAuthenticationFilter(jwtService, userDetailsService);
+			CustomUserDetailsService userDetailsService,
+			ObjectMapper objectMapper) {
+		return new JwtAuthenticationFilter(jwtService, userDetailsService, objectMapper);
 	}
 
 }
